@@ -22,16 +22,16 @@ jobs:
           // ---- Edit this table to change the workout ----
           struct Seg { let kind: String; let minutes: Double; let kmh: Double; let incline: Int }
 
-          let workoutName = "Incline Walk 40"
+          let workoutName = "40 Min Zone 2 Incline v5"
           let segs: [Seg] = [
               Seg(kind: "warmup",   minutes: 4, kmh: 4.3, incline: 5),
-              Seg(kind: "work",     minutes: 5, kmh: 4.7, incline: 9),
-              Seg(kind: "work",     minutes: 5, kmh: 4.6, incline: 11),
+              Seg(kind: "work",     minutes: 5, kmh: 4.7, incline: 10),
+              Seg(kind: "work",     minutes: 5, kmh: 4.6, incline: 12),
+              Seg(kind: "work",     minutes: 5, kmh: 4.5, incline: 14),
+              Seg(kind: "recovery", minutes: 2, kmh: 4.4, incline: 9),
               Seg(kind: "work",     minutes: 5, kmh: 4.5, incline: 13),
-              Seg(kind: "recovery", minutes: 3, kmh: 4.4, incline: 7),
-              Seg(kind: "work",     minutes: 5, kmh: 4.5, incline: 12),
               Seg(kind: "work",     minutes: 5, kmh: 4.4, incline: 14),
-              Seg(kind: "work",     minutes: 5, kmh: 4.2, incline: 15),
+              Seg(kind: "work",     minutes: 6, kmh: 4.3, incline: 15),
               Seg(kind: "cooldown", minutes: 3, kmh: 3.6, incline: 2),
           ]
           let workZone = 2   // heart rate zone targeted during work intervals
@@ -105,22 +105,22 @@ jobs:
           UDID=$(xcrun simctl list devices available | grep -E 'iPhone' | head -n 1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
           echo "Using simulator $UDID"
           xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl spawn "$UDID" "$PWD/work/gen" "$PWD/out/InclineWalk40.workout"
+          xcrun simctl spawn "$UDID" "$PWD/work/gen" "$PWD/out/Zone2Incline-v5.workout"
           ls -l out
-          test -s out/InclineWalk40.workout
+          test -s out/Zone2Incline-v5.workout
 
       - name: Keep a copy as a build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: InclineWalk40
-          path: out/InclineWalk40.workout
+          name: Zone2Incline-v5
+          path: out/Zone2Incline-v5.workout
 
       - name: Publish as a release download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "workout-${{ github.run_number }}" out/InclineWalk40.workout \
+          gh release create "workout-${{ github.run_number }}" out/Zone2Incline-v5.workout \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "Incline Walk 40 (build ${{ github.run_number }})" \
-            --notes "Open InclineWalk40.workout on your iPhone and tap Add to Watch."
+            --title "40 Min Zone 2 Incline v5 (build ${{ github.run_number }})" \
+            --notes "Open Zone2Incline-v5.workout on your iPhone and tap Add to Watch."
