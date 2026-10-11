@@ -1,0 +1,126 @@
+name: Build workout file
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Write generator
+        run: |
+          mkdir -p work out
+          cat > work/main.swift <<'SWIFT'
+          import Foundation
+          import HealthKit
+          import WorkoutKit
+
+          // ---- Edit this table to change the workout ----
+          struct Seg { let kind: String; let minutes: Double; let kmh: Double; let incline: Int }
+
+          let workoutName = "Incline Walk 40"
+          let segs: [Seg] = [
+              Seg(kind: "warmup",   minutes: 4, kmh: 4.3, incline: 5),
+              Seg(kind: "work",     minutes: 5, kmh: 4.7, incline: 9),
+              Seg(kind: "work",     minutes: 5, kmh: 4.6, incline: 11),
+              Seg(kind: "work",     minutes: 5, kmh: 4.5, incline: 13),
+              Seg(kind: "recovery", minutes: 3, kmh: 4.4, incline: 7),
+              Seg(kind: "work",     minutes: 5, kmh: 4.5, incline: 12),
+              Seg(kind: "work",     minutes: 5, kmh: 4.4, incline: 14),
+              Seg(kind: "work",     minutes: 5, kmh: 4.2, incline: 15),
+              Seg(kind: "cooldown", minutes: 3, kmh: 3.6, incline: 2),
+          ]
+          let workZone = 2   // heart rate zone targeted during work intervals
+          // ------------------------------------------------
+
+          let activity: HKWorkoutActivityType = .walking
+          let location: HKWorkoutSessionLocationType = .indoor
+
+          func stepName(_ s: Seg) -> String {
+              "\(String(format: "%.1f", s.kmh)) km/h @ \(s.incline)%"
+          }
+
+          func makeStep(_ s: Seg) -> WorkoutStep {
+              var alert: (any WorkoutAlert)? = nil
+              if s.kind == "work" {
+                  let zone = HeartRateZoneAlert(zone: workZone)
+                  if CustomWorkout.supportsAlert(zone, activity: activity, location: location) {
+                      alert = zone
+                  } else {
+                      print("WARNING: heart rate zone alert not supported for indoor walk; omitted")
+                  }
+              }
+              return WorkoutStep(goal: .time(s.minutes, .minutes), alert: alert, displayName: stepName(s))
+          }
+
+          guard CustomWorkout.supportsActivity(activity) else {
+              print("ERROR: custom workouts are not supported for walking")
+              exit(1)
+          }
+
+          let warmup = segs.first { $0.kind == "warmup" }.map(makeStep)
+          let cooldown = segs.last { $0.kind == "cooldown" }.map(makeStep)
+          let intervals: [IntervalStep] = segs.compactMap { s in
+              switch s.kind {
+              case "work": return IntervalStep(.work, step: makeStep(s))
+              case "recovery": return IntervalStep(.recovery, step: makeStep(s))
+              default: return nil
+              }
+          }
+
+          let workout = CustomWorkout(
+              activity: activity,
+              location: location,
+              displayName: workoutName,
+              warmup: warmup,
+              blocks: [IntervalBlock(steps: intervals, iterations: 1)],
+              cooldown: cooldown
+          )
+
+          do {
+              let plan = WorkoutPlan(.custom(workout))
+              let data = try plan.dataRepresentation
+              let url = URL(fileURLWithPath: CommandLine.arguments[1])
+              try data.write(to: url)
+              print("Wrote \(data.count) bytes to \(url.path)")
+          } catch {
+              print("ERROR: \(error)")
+              exit(1)
+          }
+          SWIFT
+
+      - name: Compile for iOS simulator
+        run: |
+          xcodebuild -version
+          xcrun -sdk iphonesimulator swiftc \
+            -target "$(uname -m)-apple-ios18.0-simulator" \
+            work/main.swift -o work/gen
+
+      - name: Run in simulator
+        run: |
+          UDID=$(xcrun simctl list devices available | grep -E 'iPhone' | head -n 1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
+          echo "Using simulator $UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl spawn "$UDID" "$PWD/work/gen" "$PWD/out/InclineWalk40.workout"
+          ls -l out
+          test -s out/InclineWalk40.workout
+
+      - name: Keep a copy as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InclineWalk40
+          path: out/InclineWalk40.workout
+
+      - name: Publish as a release download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "workout-${{ github.run_number }}" out/InclineWalk40.workout \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Incline Walk 40 (build ${{ github.run_number }})" \
+            --notes "Open InclineWalk40.workout on your iPhone and tap Add to Watch."
